@@ -37,10 +37,30 @@ function SceneHero({ scene }: { scene: Scene }) {
   )
 }
 
-export default function ScenePage() {
+// 场景ID到问答分类的映射
+const SCENE_CATEGORY_MAP: Record<string, string> = {
+  before: '出发前',
+  arrive: '报到',
+  settle: '宿舍',
+  military: '军训',
+  daily: '日常',
+}
+
+interface ScenePageProps {
+  onSceneChange?: (scene: string) => void
+}
+
+export default function ScenePage({ onSceneChange }: ScenePageProps) {
   const { sceneId } = useParams<{ sceneId: string }>()
   const location = useLocation()
   const scene = scenes.find((s) => s.id === sceneId)
+
+  // 上下文感知：通知 App 当前场景对应的问答分类
+  useEffect(() => {
+    if (sceneId && onSceneChange) {
+      onSceneChange(SCENE_CATEGORY_MAP[sceneId] || '全部')
+    }
+  }, [sceneId, onSceneChange])
 
   // 搜索结果定位：页面加载后滚动到指定Q&A并高亮
   useEffect(() => {
