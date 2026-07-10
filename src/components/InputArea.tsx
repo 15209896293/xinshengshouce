@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, memo } from 'react'
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 import type { Post, Category, PostType } from '@/types/community'
 
 const CATEGORIES: { label: string; value: string }[] = [
@@ -17,11 +18,63 @@ const POST_TYPES: { label: string; value: PostType }[] = [
   { label: '吐槽', value: 'complain' },
 ]
 
+// 图片压缩（纯函数，不需要 hook）
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let width = img.width
+        let height = img.height
+        if (width > 800) {
+          height = (height * 800) / width
+          width = 800
+        }
+        canvas.width = width
+        canvas.height = height
+        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height)
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob)
+          else reject(new Error('压缩失败'))
+        }, 'image/jpeg', 0.7)
+      }
+      img.onerror = reject
+      img.src = e.target?.result as string
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+async function uploadImages(files: File[]): Promise<string[]> {
+  const urls: string[] = []
+  for (const file of files.slice(0, 3)) {
+    if (file.size > 2 * 1024 * 1024) continue
+    try {
+      const blob = await compressImage(file)
+      const ext = file.type.includes('png') ? 'png' : 'jpg'
+      const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+      const { error } = await supabase.storage
+        .from('community-images')
+        .upload(filename, blob, { contentType: 'image/jpeg' })
+      if (error) continue
+      const { data: { publicUrl } } = supabase.storage
+        .from('community-images')
+        .getPublicUrl(filename)
+      urls.push(publicUrl)
+    } catch {
+      // 跳过上传失败的图片
+    }
+  }
+  return urls
+}
+
 interface InputAreaProps {
   isAdmin: boolean
   defaultCategory: Category
   replyingTo: Post | null
-  uploading: boolean
   onSubmit: (data: {
     content: string
     author: string
@@ -38,7 +91,6 @@ export const InputArea = memo(function InputArea({
   isAdmin,
   defaultCategory,
   replyingTo,
-  uploading,
   onSubmit,
   onCancelReply,
 }: InputAreaProps) {
@@ -49,9 +101,9 @@ export const InputArea = memo(function InputArea({
   const [inputAuthor, setInputAuthor] = useState(() => localStorage.getItem('community_author_name') || '')
   const [imageFiles, setImageFiles] = useState<File[]>([])
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([])
+  const [uploading, setUploading] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  // 用 ref 追踪防刷状态，不用 state 避免重渲染
   const lastPostTimeRef = useRef<number>(0)
   const lastContentRef = useRef<string>('')
 
@@ -62,7 +114,6 @@ export const InputArea = memo(function InputArea({
     setInputCategory(defaultCategory)
   }
 
-  // 防刷检查（纯 ref 操作，不触发重渲染）
   const checkCanPost = useCallback((): { canPost: boolean; reason?: string } => {
     const now = Date.now()
     const last = lastPostTimeRef.current
@@ -78,27 +129,23 @@ export const InputArea = memo(function InputArea({
   }, [])
 
   const handleSubmit = useCallback(async () => {
-    if (!inputContent.trim()) return
-
-    const spam = checkCanPost()
-    if (!spam.canPost) {
-      alert(spam.reason)
-      return
+    if (!inputContent.trim() && imageFiles.length === 0) return
+    if (inputContent.trim()) {
+      const spam = checkCanPost()
+      if (!spam.canPost) { alert(spam.reason); return }
+      if (isDuplicate(inputContent)) { alert('不要发送重复内容'); return }
     }
 
-    if (isDuplicate(inputContent)) {
-      alert('不要发送重复内容')
-      return
-    }
-
+    setUploading(true)
     try {
-      // 图片上传在父组件处理，这里只传 files 信息
+      // 上传图片
       let imageUrls: string[] = []
-      // 如果有图片，先压缩再通知父组件
-      // （实际上图片上传逻辑由父组件的 uploading 状态控制）
+      if (imageFiles.length > 0) {
+        imageUrls = await uploadImages(imageFiles)
+      }
 
       await onSubmit({
-        content: inputContent.trim(),
+        content: inputContent.trim() || '(图片)',
         author: inputAuthor.trim() || '匿名新生',
         category: inputCategory === '全部' ? '日常' : inputCategory,
         postType: inputType,
@@ -119,23 +166,29 @@ export const InputArea = memo(function InputArea({
     } catch (err: any) {
       console.error(err)
       alert(err?.message || '发送失败，请重试')
+    } finally {
+      setUploading(false)
     }
-  }, [inputContent, inputAuthor, inputCategory, inputType, replyingTo, isAdmin, checkCanPost, isDuplicate, onSubmit])
+  }, [inputContent, inputAuthor, inputCategory, inputType, replyingTo, imageFiles, isAdmin, checkCanPost, isDuplicate, onSubmit])
 
   const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
     const newFiles = [...imageFiles, ...files].slice(0, 3)
     setImageFiles(newFiles)
-    const urls = newFiles.map(f => URL.createObjectURL(f))
-    setImagePreviewUrls(urls)
+    // 释放旧的 blob URL
+    imagePreviewUrls.forEach(u => URL.revokeObjectURL(u))
+    setImagePreviewUrls(newFiles.map(f => URL.createObjectURL(f)))
     e.target.value = ''
-  }, [imageFiles])
+  }, [imageFiles, imagePreviewUrls])
 
   const removeImage = useCallback((index: number) => {
+    URL.revokeObjectURL(imagePreviewUrls[index])
     const newFiles = imageFiles.filter((_, i) => i !== index)
     setImageFiles(newFiles)
-    setImagePreviewUrls(newFiles.map(f => URL.createObjectURL(f)))
-  }, [imageFiles])
+    const newUrls = imagePreviewUrls.filter((_, i) => i !== index)
+    setImagePreviewUrls(newUrls)
+  }, [imageFiles, imagePreviewUrls])
 
   return (
     <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-3">
@@ -189,7 +242,7 @@ export const InputArea = memo(function InputArea({
           {imagePreviewUrls.length > 0 && (
             <div className="flex gap-2">
               {imagePreviewUrls.map((url, i) => (
-                <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden">
+                <div key={url} className="relative w-16 h-16 rounded-lg overflow-hidden">
                   <img src={url} alt="" className="w-full h-full object-cover" />
                   <button onClick={() => removeImage(i)} className="absolute top-0 right-0 w-4 h-4 bg-black/50 rounded-full text-white text-[10px] flex items-center justify-center">x</button>
                 </div>
@@ -201,15 +254,13 @@ export const InputArea = memo(function InputArea({
 
       {/* 输入行 */}
       <div className="flex items-center gap-2">
-        {!showInput && (
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0"
-            title="添加图片"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          </button>
-        )}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 shrink-0"
+          title="添加图片"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        </button>
         <input
           ref={fileInputRef}
           type="file"
@@ -238,10 +289,10 @@ export const InputArea = memo(function InputArea({
         </div>
         <button
           onClick={handleSubmit}
-          disabled={!inputContent.trim() || uploading}
+          disabled={(!inputContent.trim() && imageFiles.length === 0) || uploading}
           className={cn(
             'w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0 transition-colors',
-            inputContent.trim()
+            (inputContent.trim() || imageFiles.length > 0)
               ? 'bg-amber-700 hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500'
               : 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed'
           )}
