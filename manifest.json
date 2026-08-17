@@ -1,17 +1,1 @@
-{
-  "name": "新生手册",
-  "short_name": "新生手册",
-  "start_url": "./",
-  "display": "standalone",
-  "background_color": "#1F3A5F",
-  "theme_color": "#1F3A5F",
-  "description": "合肥幼儿师范高等专科学校新生手册",
-  "icons": [
-    {
-      "src": "./icons.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    }
-  ]
-}
+{"name":"新生手册 · 合肥幼专","short_name":"新生手册","description":"合肥幼儿师范高等专科学校新生手册","start_url":"./","display":"standalone","background_color":"#1F3A5F","theme_color":"#1F3A5F","icons":[{"src":"icons.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}
