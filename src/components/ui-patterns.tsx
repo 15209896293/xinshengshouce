@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import schoolGate from '@/assets/school-gate'
 import type { ReactNode } from 'react'
+
+// 资源路径统一走 BASE_URL，兼容 GitHub Pages 子路径部署(/xinshengshouce/)与根路径部署(/)
+const baseUrl = import.meta.env.BASE_URL
 
 /** 页面顶部 Hero 横幅 */
 export function PageHero({
@@ -19,8 +21,10 @@ export function PageHero({
   return (
     <section className="relative h-[36vh] min-h-[260px] w-full overflow-hidden">
       <img
-        src={schoolGate}
+        src={`${baseUrl}images/school-gate.webp`}
         alt="少荃湖校区"
+        loading="lazy"
+        decoding="async"
         className="absolute inset-0 h-full w-full object-cover"
       />
       <div className="absolute inset-0 hero-overlay" />

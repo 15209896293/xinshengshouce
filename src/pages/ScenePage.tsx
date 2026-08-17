@@ -1,10 +1,14 @@
 import { useEffect } from 'react'
-import { useParams, Navigate, useLocation } from 'react-router-dom'
+import { useParams, Navigate, useLocation, Link } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { scenes, type Scene } from '@/data/scenes'
 import { Pager, DisclaimerBar } from '@/components/ui-patterns'
 import ImageLightbox from '@/components/ImageLightbox'
+
+// 资源路径统一走 BASE_URL，兼容 GitHub Pages 子路径部署(/xinshengshouce/)与根路径部署(/)
+const baseUrl = import.meta.env.BASE_URL
 
 const statusMap = {
   confirmed: { label: '已确认', class: 'bg-green-100 text-green-700' },
@@ -110,6 +114,21 @@ export default function ScenePage({ onSceneChange }: ScenePageProps) {
         </div>
       </section>
 
+      {/* 出发前专属：行李清单入口 */}
+      {scene.id === 'before' && (
+        <section className="border-b border-border bg-secondary/20">
+          <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
+            <Link to="/packing">
+              <Button variant="outline" className="w-full border-primary/30 hover:border-primary/50 hover:bg-primary/5">
+                <span className="text-base">🧳</span>
+                <span className="ml-2">查看行李清单（可勾选）</span>
+                <span className="ml-auto text-xs text-muted-foreground">25件 →</span>
+              </Button>
+            </Link>
+          </div>
+        </section>
+      )}
+
       {/* 内容 */}
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12">
         {scene.groups.map((group) => (
@@ -156,7 +175,7 @@ export default function ScenePage({ onSceneChange }: ScenePageProps) {
                       {item.image && (
                         <div className="mt-3 flex justify-center rounded-sm bg-secondary/20">
                           <ImageLightbox
-                            src={`/images/${item.image}.jpg`}
+                            src={`${baseUrl}images/${item.image}.webp`}
                             alt={item.question}
                             className="max-h-52 w-auto max-w-full"
                           />
@@ -172,7 +191,7 @@ export default function ScenePage({ onSceneChange }: ScenePageProps) {
 
         <Pager
           prev={prev ? { label: prev.title, path: `/${prev.id}` } : undefined}
-          next={next ? { label: next.title, path: `/${next.id}` } : undefined}
+          next={next ? { label: next.title, path: `/${next.id}` } : { label: '行李清单', path: '/packing' }}
         />
       </div>
 

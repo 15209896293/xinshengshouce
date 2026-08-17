@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Search, Package, ChevronRight, Calendar, MessageCircle } from 'lucide-react'
-import schoolGate from '@/assets/school-gate'
+import { Search, Package, ChevronRight, Calendar, MessageCircle, ClipboardList } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { scenes, globalInfo } from '@/data/scenes'
 import { seniorInfo } from '@/data/senior'
 import ImageLightbox from '@/components/ImageLightbox'
+
+// 资源路径统一走 BASE_URL，兼容 GitHub Pages 子路径部署(/xinshengshouce/)与根路径部署(/)
+const baseUrl = import.meta.env.BASE_URL
+const imgUrl = (name: string) => `${baseUrl}images/${name}`
 
 // 校园总览图片 — 存在则显示可点击放大，不存在则显示编号占位
 function CampusImage({ id, label }: { id: string; label: string }) {
@@ -25,7 +28,7 @@ function CampusImage({ id, label }: { id: string; label: string }) {
 
   return (
     <ImageLightbox
-      src={`/images/${id}.jpg`}
+      src={imgUrl(`${id}.webp`)}
       alt={label}
       className="aspect-[4/3] w-full"
       onError={() => setHasError(true)}
@@ -33,16 +36,17 @@ function CampusImage({ id, label }: { id: string; label: string }) {
   )
 }
 
-// 机制2-B:报到当天任务(9/4-9/6显示)
+// 机制2-B:报到当天任务(日期从 globalInfo.reportWindow 读取,可配置)
 function isReportDay() {
   const now = new Date()
   const month = now.getMonth() + 1
   const date = now.getDate()
-  // 9月4-6日显示报到当天任务
-  return month === 9 && date >= 4 && date <= 6
+  const { month: wMonth, startDay, endDay } = globalInfo.reportWindow
+  return month === wMonth && date >= startDay && date <= endDay
 }
 
 const expressAddress = globalInfo.expressAddress
+const archiveAddress = globalInfo.archiveAddress
 
 export default function HomePage() {
   const [copied, setCopied] = useState(false)
@@ -70,15 +74,16 @@ export default function HomePage() {
       {/* Hero区(机制1:极简,一句话+搜索框) */}
       <section className="relative flex min-h-[70vh] items-center justify-center overflow-hidden bg-[#0E0E0F]">
         <img
-          src={schoolGate}
+          src={imgUrl('school-gate.webp')}
           alt="少荃湖校区"
+          fetchPriority="high"
           className="absolute inset-0 h-full w-full object-cover opacity-30"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/60 to-black/80" />
 
         <div className="relative z-10 mx-auto max-w-3xl px-4 py-20 text-center">
           <Badge className="mb-6 border-none bg-accent/90 text-accent-foreground">
-            少荃湖新校区 · 2026级 · 带班学长整理
+            合肥幼专 · 2026级 · 带班学长整理
           </Badge>
           <h1 className="text-4xl font-bold leading-tight text-white sm:text-5xl md:text-6xl">
             少荃湖新生手册
@@ -95,7 +100,7 @@ export default function HomePage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="搜索:电费 / 门禁 / 校园卡..."
+                placeholder="搜索：电费 / 门禁 / 校园卡..."
                 className="h-12 w-full rounded-sm border-0 bg-white pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </div>
@@ -105,7 +110,7 @@ export default function HomePage() {
           </form>
 
           <div className="mt-6 flex flex-wrap justify-center gap-3 text-xs text-white/60">
-            <span>开学9月5日</span>
+            <span>{globalInfo.semesterStart}</span>
             <span>·</span>
             <span>5个场景全覆盖</span>
             <span>·</span>
@@ -141,6 +146,24 @@ export default function HomePage() {
         </section>
       )}
 
+      {/* 快递地址一键复制(常驻置顶) */}
+      <section className="border-b border-border bg-background">
+        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
+          <Link to="/packing" className="block">
+            <div className="flex items-center justify-between rounded-sm border border-primary/20 bg-primary/5 p-4 transition-colors hover:border-primary/40 hover:bg-primary/10">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">🧳</span>
+                <div>
+                  <div className="text-sm font-bold text-foreground">行李清单</div>
+                  <div className="text-xs text-muted-foreground">证件/床品/军训/生活用品，可勾选标记</div>
+                </div>
+              </div>
+              <span className="text-xs font-semibold text-primary">查看 →</span>
+            </div>
+          </Link>
+        </div>
+      </section>
+
       {/* 机制2-A:快递地址一键复制(常驻置顶) */}
       <section className="border-b border-border bg-background">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
@@ -153,9 +176,6 @@ export default function HomePage() {
             </div>
             <div className="text-sm font-medium leading-relaxed text-foreground sm:text-base">
               {expressAddress} 合肥幼儿师范高等专科学校(少荃湖校区)
-              <span className="mt-1 block text-xs text-muted-foreground">
-                + 你的楼栋号/宿舍号
-              </span>
             </div>
             <Button
               size="sm"
@@ -166,6 +186,30 @@ export default function HomePage() {
             </Button>
             <p className="mt-3 text-xs text-muted-foreground">
               ⚠️ 报到用官方地址(文忠路2299号),快递寄送用上方瑶海区地址可正常寄达
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* 档案邮寄地址 */}
+      <section className="border-b border-border bg-background">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+          <div className="rounded-sm border border-accent/30 bg-accent/5 p-5">
+            <div className="mb-2 flex items-center gap-2">
+              <ClipboardList className="h-4 w-4 text-accent" />
+              <span className="text-xs font-semibold uppercase tracking-widest text-accent">
+                档案邮寄地址 · 少荃湖校区
+              </span>
+            </div>
+            <div className="text-sm font-medium leading-relaxed text-foreground sm:text-base">
+              {archiveAddress}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+              <span>邮编：{globalInfo.archivePostalCode}</span>
+              <span>电话：{globalInfo.archivePhone}</span>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              ⚠️ 两个校区的新生档案均寄到少荃湖校区学生处（文忠路2299号）
             </p>
           </div>
         </div>
@@ -252,7 +296,7 @@ export default function HomePage() {
               { label: '门禁', value: '23:00', note: '建议10:50前回' },
               { label: '限电', value: '500W', note: '全寝总功率' },
               { label: '校园网', value: '无', note: '办校园卡39元/月' },
-              { label: '床垫', value: '190×90', note: '别买标准尺寸' },
+              { label: '床铺', value: '200×95', note: '床垫买190×90' },
             ].map((f) => (
               <div
                 key={f.label}
@@ -288,12 +332,9 @@ export default function HomePage() {
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             {[
-              { label: '校园鸟瞰', id: '27' },
-              { label: '教学楼', id: '28' },
+              { label: '校园地图', id: '26' },
               { label: '体育馆（报到点）', id: '29' },
               { label: '一站式学生中心', id: '30' },
-              { label: '宿舍楼', id: '31' },
-              { label: '校园景观', id: '32' },
             ].map((img) => (
               <div
                 key={img.id}
@@ -323,6 +364,13 @@ export default function HomePage() {
             <p className="mt-2 text-sm text-muted-foreground">
               报到前先装好，到了直接用
             </p>
+          </div>
+          <div className="mx-auto mb-6 max-w-md overflow-hidden rounded-sm bg-secondary/40">
+            <ImageLightbox
+              src={imgUrl('35.webp')}
+              alt="新生必备APP"
+              className="w-full"
+            />
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             {globalInfo.apps.map((app) => (

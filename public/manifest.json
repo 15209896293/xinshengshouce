@@ -2,7 +2,7 @@
   "name": "少荃湖新生手册",
   "short_name": "新生手册",
   "description": "合肥幼儿师范高等专科学校少荃湖新校区新生手册,带班学长整理",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#FAFAF6",
   "theme_color": "#1F3A5F",
